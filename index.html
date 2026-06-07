@@ -7,6 +7,9 @@
     <!-- Leaflet CSS + JS -->
 <link rel="stylesheet" href="libs/leaflet.css" />
 <script src="libs/leaflet.js"></script>
+<!-- Nuove librerie per il caching offline -->
+<script src="https://unpkg.com/pouchdb@5.2.0/dist/pouchdb.js"></script>
+<script src="https://unpkg.com/leaflet.tilelayer.pouchdbcached@latest/L.TileLayer.PouchDBCached.js"></script>
 <link rel="stylesheet" href="libs/MarkerCluster.css" />
 <link rel="stylesheet" href="libs/MarkerCluster.Default.css" />
 <script src="libs/leaflet.markercluster.js"></script>
@@ -124,11 +127,15 @@
         }
 
         // Inizializza mappa
-        function initMap(centerLat = 45.57249, centerLng = 10.81178, zoom = 14) {
-            map = L.map('map').setView([centerLat, centerLng], zoom);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
-            }).addTo(map);
+let tileLayer;
+
+function initMap(centerLat, centerLng, zoom) {
+    map = L.map('map').setView([centerLat, centerLng], zoom);
+    tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OSM',
+        useCache: true,      // attiva caching
+        crossOrigin: true    // necessario per PouchDB
+    }).addTo(map);
             
             // Crea il cluster group (con opzioni di personalizzazione, se vuoi)
             markerClusterGroup = L.markerClusterGroup({
@@ -267,6 +274,21 @@
                 return m;
             });
         }
+
+        // Seeding automatico per l'area di Rivoli (dopo 2 secondi, per non bloccare UI)
+setTimeout(() => {
+    const southWest = L.latLng(45.53, 10.78);
+    const northEast = L.latLng(45.61, 10.85);
+    const bounds = L.latLngBounds(southWest, northEast);
+    const minZoom = 13;
+    const maxZoom = 16;
+
+    tileLayer.seed(bounds, minZoom, maxZoom)
+        .on('seedstart', () => console.log('Download tile iniziato'))
+        .on('seedprogress', (e) => console.log(`Tile rimanenti: ${e.remainingLength}`))
+        .on('seedend', () => console.log('Mappa offline pronta per Rivoli!'))
+        .on('seederror', (e) => console.error('Errore seeding:', e));
+}, 2000);
     </script>
 
 <script>
