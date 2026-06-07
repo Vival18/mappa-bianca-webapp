@@ -4,9 +4,7 @@
     <meta charset="UTF-8">
     <title>Mappa Bianca – WebApp</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <!-- MarkerCluster CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
     <style>
@@ -14,10 +12,10 @@
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         #map { height: 100vh; width: 100%; }
         
-        /* Pannello filtri */
+        /* Pannello filtri - spostato più in basso per non coprire lo zoom */
         .filter-bar {
             position: absolute;
-            top: 20px;
+            top: 70px;             /* <--- chiave: abbassato da 20px a 70px */
             left: 10px;
             right: 10px;
             z-index: 1000;
@@ -82,10 +80,10 @@
             backdrop-filter: blur(4px);
         }
 
-        /* Messaggio offline (opzionale) */
+        /* Messaggio offline - spostato per non sovrapporsi ai filtri */
         .offline-msg {
             position: absolute;
-            top: 70px;
+            top: 120px;            /* <--- abbassato per non sovrapporsi a filtri */
             left: 50%;
             transform: translateX(-50%);
             z-index: 1001;
@@ -104,7 +102,7 @@
             .filter-btn { padding: 4px 10px; font-size: 12px; }
             .legend { font-size: 10px; bottom: 60px; }
             .counter { bottom: 60px; }
-            .offline-msg { top: 70px; font-size: 10px; white-space: nowrap; }
+            .offline-msg { top: 100px; font-size: 10px; white-space: nowrap; }
         }
     </style>
 </head>
@@ -115,18 +113,16 @@
     <div class="counter" id="counter">Caricamento...</div>
     <div class="offline-msg" id="offlineMsg">⚠️ Modalità offline – alcune aree potrebbero non essere visibili</div>
 
-    <!-- Script -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     
     <script>
-        // Mappa Bianca WebApp – versione stabile (online/offline marker, tile solo online)
+        // Mappa Bianca WebApp – versione stabile
         let map;
         let markerClusterGroup;
         let allMarkers = [];
         let currentFilter = 'Tutti';
 
-        // Mappa colori tipologia
         const colorMap = {
             'Storico': '#d32f2f',
             'Archeologico': '#d32f2f',
@@ -136,7 +132,6 @@
             'Enogastronomico': '#f57c00'
         };
         
-        // Icona circolare colorata
         function getColoredIcon(color) {
             return L.divIcon({
                 html: `<div style="background-color: ${color}; width: 28px; height: 28px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.5);"></div>`,
@@ -146,7 +141,6 @@
             });
         }
 
-        // Inizializza mappa (centro su Rivoli Veronese di default)
         function initMap(centerLat = 45.57249, centerLng = 10.81178, zoom = 14) {
             map = L.map('map').setView([centerLat, centerLng], zoom);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -161,13 +155,11 @@
             map.addLayer(markerClusterGroup);
         }
 
-        // Aggiorna contatore marker visibili
         function updateCounter() {
             const visible = markerClusterGroup.getLayers().length;
             document.getElementById('counter').innerHTML = `📍 ${visible} / ${allMarkers.length} punti`;
         }
 
-        // Filtra per categoria
         function filterMarkers(category) {
             currentFilter = category;
             markerClusterGroup.clearLayers();
@@ -182,7 +174,6 @@
             updateCounter();
         }
 
-        // Costruisce bottoni filtro dinamicamente
         function buildFilters(uniqueTypes) {
             const filterDiv = document.getElementById('filterBar');
             filterDiv.innerHTML = '';
@@ -201,7 +192,6 @@
             });
         }
 
-        // Costruisce legenda
         function buildLegend(uniqueTypes) {
             const legendDiv = document.getElementById('legend');
             legendDiv.innerHTML = '<strong>Legenda</strong><br>';
@@ -211,24 +201,22 @@
             });
         }
 
-        // Controllo offline e mostra messaggio
         function checkOffline() {
+            const offlineMsg = document.getElementById('offlineMsg');
             if (!navigator.onLine) {
-                document.getElementById('offlineMsg').style.display = 'block';
+                offlineMsg.style.display = 'block';
             } else {
-                document.getElementById('offlineMsg').style.display = 'none';
+                offlineMsg.style.display = 'none';
             }
         }
         window.addEventListener('online', checkOffline);
         window.addEventListener('offline', checkOffline);
         
-        // Caricamento dati markers.json
         fetch('markers.json')
             .then(response => response.json())
             .then(data => {
                 if (!data.length) throw new Error('Nessun marker');
                 
-                // Normalizza tipologie
                 const typesSet = new Set();
                 data.forEach(m => {
                     let t = m.tipologia;
@@ -239,7 +227,6 @@
                 });
                 const uniqueTypes = Array.from(typesSet);
                 
-                // Centro mappa sul primo marker (se esiste)
                 let centerLat = 45.57249, centerLng = 10.81178;
                 if (data.length && data[0].lat && data[0].lng) {
                     centerLat = parseFloat(data[0].lat);
@@ -248,7 +235,6 @@
                 initMap(centerLat, centerLng, 14);
                 checkOffline();
                 
-                // Crea marker
                 data.forEach(m => {
                     const lat = parseFloat(m.lat);
                     const lng = parseFloat(m.lng);
@@ -278,7 +264,6 @@
                 document.getElementById('legend').innerHTML = 'Errore JSON';
             });
         
-        // Utility escape HTML
         function escapeHtml(str) {
             if (!str) return '';
             return str.replace(/[&<>]/g, function(m) {
@@ -289,7 +274,6 @@
             });
         }
 
-        // Registrazione Service Worker (solo per caching risorse statiche – niente tile)
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/mappa-bianca-webapp/sw.js')
                 .then(reg => console.log('Service Worker registrato', reg))
