@@ -1,8 +1,13 @@
-const CACHE_NAME = 'mappa-bianca-cache-v1';
+const CACHE_NAME = 'mappa-bianca-cache-v3';
 const urlsToCache = [
   '/mappa-bianca-webapp/',
   '/mappa-bianca-webapp/index.html',
-  '/mappa-bianca-webapp/markers.json'
+  '/mappa-bianca-webapp/markers.json',
+  '/mappa-bianca-webapp/libs/leaflet.css',
+  '/mappa-bianca-webapp/libs/leaflet.js',
+  '/mappa-bianca-webapp/libs/MarkerCluster.css',
+  '/mappa-bianca-webapp/libs/MarkerCluster.Default.css',
+  '/mappa-bianca-webapp/libs/leaflet.markercluster.js'
 ];
 
 self.addEventListener('install', event => {
