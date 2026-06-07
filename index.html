@@ -1,34 +1,273 @@
 <!DOCTYPE html>
-<html>
+<html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>Mappa Bianca WebApp</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mappa Bianca – WebApp con Clustering</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <!-- Leaflet CSS + JS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- MarkerCluster CSS + JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <style>
-        body { margin:0; padding:0; font-family: sans-serif; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         #map { height: 100vh; width: 100%; }
-        .info { position: absolute; bottom: 10px; left: 10px; background: white; padding: 5px 10px; z-index: 1000; border-radius: 4px; font-size: 12px; }
+        
+        /* Pannello filtri */
+        .filter-bar {
+            position: absolute;
+            top: 20px;
+            left: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: rgba(255,255,255,0.95);
+            padding: 8px 12px;
+            border-radius: 40px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+            backdrop-filter: blur(4px);
+        }
+        .filter-btn {
+            padding: 6px 14px;
+            border: none;
+            border-radius: 30px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+            background-color: #eee;
+            color: #333;
+        }
+        .filter-btn:hover { transform: scale(1.02); opacity: 0.9; }
+        .filter-btn.active { background-color: #3388ff; color: white; box-shadow: 0 0 4px #3388ff; }
+        
+        /* Legenda (in basso a destra) */
+        .legend {
+            position: absolute;
+            bottom: 20px;
+            right: 10px;
+            z-index: 1000;
+            background: rgba(255,255,255,0.9);
+            padding: 8px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.2);
+            backdrop-filter: blur(4px);
+            pointer-events: none;
+        }
+        .legend span {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+        
+        /* Contatore in basso a sinistra */
+        .counter {
+            position: absolute;
+            bottom: 20px;
+            left: 10px;
+            z-index: 1000;
+            background: rgba(0,0,0,0.6);
+            color: white;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            backdrop-filter: blur(4px);
+        }
+        
+        @media (max-width: 600px) {
+            .filter-btn { padding: 4px 10px; font-size: 12px; }
+            .legend { font-size: 10px; bottom: 60px; }
+            .counter { bottom: 60px; }
+        }
     </style>
 </head>
 <body>
     <div id="map"></div>
-    <div class="info">Mappa Bianca – Caricamento...</div>
+    <div class="filter-bar" id="filterBar"></div>
+    <div class="legend" id="legend"></div>
+    <div class="counter" id="counter">Caricamento...</div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        // Qui caricherai markers.json e inizializzerai la mappa
+        // Mappa interattiva con clustering
+        let map;
+        let markerClusterGroup;  // sarà il gruppo di cluster
+        let allMarkers = [];     // array di oggetti { marker, tipologia }
+        let currentFilter = 'Tutti';
+
+        // Mappa colori tipologia
+        const colorMap = {
+            'Storico': '#d32f2f',
+            'Archeologico': '#d32f2f',
+            'Religioso': '#9c27b0',
+            'Paesaggistico': '#388e3c',
+            'Naturalistico': '#388e3c',
+            'Enogastronomico': '#f57c00'
+        };
+        
+        // Funzione per creare icona circolare colorata
+        function getColoredIcon(color) {
+            return L.divIcon({
+                html: `<div style="background-color: ${color}; width: 28px; height: 28px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.5);"></div>`,
+                iconSize: [28, 28],
+                className: 'custom-marker',
+                popupAnchor: [0, -14]
+            });
+        }
+
+        // Inizializza mappa
+        function initMap(centerLat = 45.57249, centerLng = 10.81178, zoom = 14) {
+            map = L.map('map').setView([centerLat, centerLng], zoom);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
+            }).addTo(map);
+            
+            // Crea il cluster group (con opzioni di personalizzazione, se vuoi)
+            markerClusterGroup = L.markerClusterGroup({
+                showCoverageOnHover: false,   // evita di mostrare il cerchio di copertura
+                maxClusterRadius: 80,         // raggio massimo per raggruppare
+                disableClusteringAtZoom: 18   // disabilita clustering a zoom molto alto
+            });
+            map.addLayer(markerClusterGroup);
+        }
+
+        // Aggiorna contatore: conta marker attualmente nel cluster group
+        function updateCounter() {
+            // markerClusterGroup.getLayers() restituisce tutti i marker (non i cluster)
+            const visible = markerClusterGroup.getLayers().length;
+            document.getElementById('counter').innerHTML = `📍 ${visible} / ${allMarkers.length} punti`;
+        }
+
+        // Filtra i marker: rimuove tutti dal cluster, poi aggiunge solo quelli della categoria selezionata
+        function filterMarkers(category) {
+            currentFilter = category;
+            // Rimuove tutti i marker dal cluster group (più efficiente che clearLayers)
+            markerClusterGroup.clearLayers();
+            
+            // Aggiunge i marker corrispondenti
+            allMarkers.forEach(item => {
+                let match = false;
+                if (category === 'Tutti') {
+                    match = true;
+                } else if (category === 'Storico' && (item.tipologia === 'Storico' || item.tipologia === 'Archeologico')) {
+                    match = true;
+                } else if (category === 'Paesaggistico' && (item.tipologia === 'Paesaggistico' || item.tipologia === 'Naturalistico')) {
+                    match = true;
+                } else if (item.tipologia === category) {
+                    match = true;
+                }
+                if (match) {
+                    markerClusterGroup.addLayer(item.marker);
+                }
+            });
+            updateCounter();
+        }
+
+        // Costruisce i filtri dinamici in base alle tipologie presenti (normalizzate)
+        function buildFilters(uniqueTypes) {
+            const filterDiv = document.getElementById('filterBar');
+            filterDiv.innerHTML = '';
+            const buttons = ['Tutti', ...uniqueTypes.sort()];
+            buttons.forEach(cat => {
+                const btn = document.createElement('button');
+                btn.textContent = cat;
+                btn.classList.add('filter-btn');
+                if (cat === 'Tutti') btn.classList.add('active');
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    filterMarkers(cat);
+                });
+                filterDiv.appendChild(btn);
+            });
+        }
+
+        // Costruisce legenda (mostra solo tipologie normalizzate presenti)
+        function buildLegend(uniqueTypes) {
+            const legendDiv = document.getElementById('legend');
+            legendDiv.innerHTML = '<strong>Legenda</strong><br>';
+            uniqueTypes.forEach(type => {
+                let color = colorMap[type] || '#3388ff';
+                legendDiv.innerHTML += `<span style="background-color: ${color};"></span> ${type}<br>`;
+            });
+        }
+
+        // Carica markers.json e avvia l'app
         fetch('markers.json')
             .then(response => response.json())
             .then(data => {
-                console.log('Marker caricati:', data);
-                document.querySelector('.info').innerHTML = `Mappa Bianca – ${data.length} punti di interesse`;
-                // Inizializza mappa (lo faremo nella Fase 1)
+                if (!data.length) throw new Error('Nessun marker');
+                
+                // Normalizza tipologie e raccoglie quelle uniche
+                const typesSet = new Set();
+                data.forEach(m => {
+                    let t = m.tipologia;
+                    if (t === 'Archeologico') t = 'Storico';
+                    if (t === 'Naturalistico') t = 'Paesaggistico';
+                    m.tipologiaNorm = t;
+                    typesSet.add(t);
+                });
+                const uniqueTypes = Array.from(typesSet);
+                
+                // Decide centro mappa: primo marker valido o Rivoli
+                let centerLat = 45.57249, centerLng = 10.81178;
+                if (data.length > 0 && data[0].lat && data[0].lng) {
+                    centerLat = parseFloat(data[0].lat);
+                    centerLng = parseFloat(data[0].lng);
+                }
+                initMap(centerLat, centerLng, 14);
+                
+                // Crea marker e popup
+                data.forEach(m => {
+                    const lat = parseFloat(m.lat);
+                    const lng = parseFloat(m.lng);
+                    if (isNaN(lat) || isNaN(lng)) return;
+                    
+                    const tipologia = m.tipologiaNorm;
+                    const color = colorMap[tipologia] || '#3388ff';
+                    const icon = getColoredIcon(color);
+                    
+                    const popupContent = `
+                        <strong>${escapeHtml(m.title)}</strong><br>
+                        <em>Tipologia:</em> ${tipologia}<br>
+                        ${m.thumbnail ? `<img src="${escapeHtml(m.thumbnail)}" style="width:100px; max-width:100%; margin-top:5px; border-radius:4px;"><br>` : ''}
+                        <p>${escapeHtml(m.excerpt || (m.content ? m.content.substring(0,150) : ''))}...</p>
+                        <a href="${escapeHtml(m.permalink)}" target="_blank">📖 Leggi di più</a>
+                    `;
+                    const marker = L.marker([lat, lng], { icon }).bindPopup(popupContent);
+                    allMarkers.push({ marker, tipologia });
+                });
+                
+                // Aggiungi tutti i marker al cluster (inizialmente nessun filtro)
+                filterMarkers('Tutti');
+                buildFilters(uniqueTypes);
+                buildLegend(uniqueTypes);
             })
             .catch(err => {
                 console.error(err);
-                document.querySelector('.info').innerHTML = 'Errore nel caricamento dei dati';
+                document.getElementById('counter').innerHTML = '❌ Errore caricamento dati';
+                document.getElementById('legend').innerHTML = 'Errore JSON';
             });
+
+        // Utilità escape HTML
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>]/g, function(m) {
+                if (m === '&') return '&amp;';
+                if (m === '<') return '&lt;';
+                if (m === '>') return '&gt;';
+                return m;
+            });
+        }
     </script>
 </body>
 </html>
