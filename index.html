@@ -25,7 +25,7 @@
             border-radius: 40px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.2);
             display: flex;
-            flex-wrap: wrap;
+            flex-wrap: wrap;      
             gap: 8px;
             justify-content: center;
             backdrop-filter: blur(4px);
@@ -98,6 +98,30 @@
             display: none;
             white-space: nowrap;
         }
+
+        .locate-container {
+    position: absolute;
+    top: 20px;
+    right: 10px;
+    z-index: 1000;
+}
+.locate-btn {
+    background: #4caf50;
+    color: white;
+    border: none;
+    border-radius: 30px;
+    padding: 8px 12px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    font-size: 14px;
+}
+.locate-btn:hover {
+    background: #388e3c;
+}
+@media (max-width: 600px) {
+    .locate-btn { padding: 4px 8px; font-size: 12px; top: 10px; right: 10px; }
+}
         
         @media (max-width: 600px) {
             .filter-btn { padding: 4px 10px; font-size: 12px; }
@@ -109,9 +133,10 @@
 </head>
 <body>
     <div id="map"></div>
-    <div class="filter-bar" id="filterBar">
-        <button id="locateBtn" class="filter-btn" style="background:#4caf50; color:white;">📍 La mia posizione</button>
-    </div>
+    <div class="filter-bar" id="filterBar"></div>
+<div class="locate-container">
+    <button id="locateBtn" class="locate-btn">📍 La mia posizione</button>
+</div>
     <div class="legend" id="legend"></div>
     <div class="counter" id="counter">Caricamento...</div>
     <div class="offline-msg" id="offlineMsg">⚠️ Modalità offline – alcune aree potrebbero non essere visibili</div>
@@ -224,6 +249,70 @@
                 legendDiv.innerHTML += `<span style="background-color: ${color};"></span> ${type}<br>`;
             });
         }
+
+        // ----- Geolocalizzazione -----
+const locateBtn = document.getElementById('locateBtn');
+let userMarker = null;
+let userCircle = null;
+
+function onLocationFound(e) {
+    const lat = e.latitude;
+    const lng = e.longitude;
+    const radius = e.accuracy;
+
+    map.setView([lat, lng], 16);
+
+    if (userMarker) map.removeLayer(userMarker);
+    if (userCircle) map.removeLayer(userCircle);
+
+    const userIcon = L.divIcon({
+        html: `<div style="background-color: #2196f3; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px black;"></div>`,
+        iconSize: [20, 20],
+        className: 'user-marker'
+    });
+    userMarker = L.marker([lat, lng], { icon: userIcon }).addTo(map);
+    userMarker.bindPopup('Sei qui').openPopup();
+
+    userCircle = L.circle([lat, lng], { radius: radius, color: '#2196f3', weight: 1, fillOpacity: 0.1 }).addTo(map);
+}
+
+function onLocationError(e) {
+    let message = '';
+    switch (e.code) {
+        case 1: message = 'Permesso negato. Attiva la geolocalizzazione.'; break;
+        case 2: message = 'Posizione non disponibile.'; break;
+        case 3: message = 'Timeout della richiesta.'; break;
+        default: message = 'Errore sconosciuto.';
+    }
+    alert('⚠️ ' + message);
+    console.error(e);
+}
+
+locateBtn.addEventListener('click', () => {
+    if (!navigator.geolocation) {
+        alert('Il tuo browser non supporta la geolocalizzazione.');
+        return;
+    }
+    locateBtn.textContent = '📍 Ricerca...';
+    locateBtn.disabled = true;
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            locateBtn.textContent = '📍 La mia posizione';
+            locateBtn.disabled = false;
+            onLocationFound({
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+                accuracy: position.coords.accuracy
+            });
+        },
+        (error) => {
+            locateBtn.textContent = '📍 La mia posizione';
+            locateBtn.disabled = false;
+            onLocationError(error);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+});
 
         function checkOffline() {
             const offlineMsg = document.getElementById('offlineMsg');
